@@ -1,0 +1,178 @@
+//
+// ---------------------------------------------------------------------
+//					START Hadoop on single-node pseudo-cluster
+// ---------------------------------------------------------------------
+//
+// Startup VM
+// 
+//
+// Confirm that there are no hadoop processes running
+// 
+jps
+// Now startup HDFS, and yarn - run jps to show all processes
+//
+echo $HADOOP_HOME
+start-dfs.sh
+start-yarn.sh
+mr-jobhistory-daemon.sh start historyserver
+jps
+//
+// ---------------------------------------------------------------------
+//					MAP-REDUCE using example jar
+// ---------------------------------------------------------------------
+//
+// get into HDFS and show gutenberg input files
+//
+hdfs dfs -ls
+hdfs dfs -ls gutenberg
+hdfs dfs -cat gutenberg/pg132.txt | more
+//
+// use an example jar to run the word count examples
+//
+hdfs dfs -ls gutenberg-out-demo
+hadoop jar $HADOOP_HOME/share/hadoop/mapreduce/hadoop-*-examples-*.jar wordcount gutenberg/pg132.txt gutenberg-out-demo
+hdfs dfs -ls gutenberg-out-demo
+//
+// showcase the output file
+// 
+hdfs dfs -cat gutenberg-out-demo/part-r-00000 | head -25
+//
+// ---------------------------------------------------------------------
+//					MAP-REDUCE using Python scripts
+// ---------------------------------------------------------------------
+//
+// Confirm the mapper.py and reducer.py scripts exist
+//
+ls -l Documents/demo/*.py
+//
+// Run the local test on the Map-Reduce scripts to demonstrate paradigm
+//
+cat Documents/book/README | Documents/demo/mapper.py | sort -k1,1 | Documents/demo/reducer.py
+//
+// Now run thru' Hadoop using Hadoop Streaming
+//
+hadoop jar $HADOOP_PREFIX/share/hadoop/tools/lib/hadoop-streaming-*.jar \
+-file Documents/demo/mapper.py -mapper Documents/demo/mapper.py \
+-file Documents/demo/reducer.py -reducer Documents/demo/reducer.py \
+-input gutenberg/pg132.txt -output gutenberg-out-demo.py
+//
+// Validate the results in the same way as earlier
+//
+hdfs dfs -cat gutenberg-out-demo.py/part-r-00000 | head -25
+// 
+// ---------------------------------------------------------------------
+//					USING PIG
+// ---------------------------------------------------------------------
+//
+// Startup the PIG in interactive mode
+//
+pig
+grunt> pwd
+grunt> ls
+grunt> book = LOAD 'hdfs:/user/hadoopuser/gutenberg/pg132.txt' USING PigStorage() AS (lines:chararray) ;
+grunt> describe book;
+//
+// Now, lets try something interesting: Join 'all' the NYSE stocks Starting with A with the dividends earned
+// 
+cat Documents/pig/pig_join.pig
+hdfs dfs -ls pig-output/JOINED_STOCK_DIV
+pig -f Documents/pig/pig_join.pig
+hdfs dfs -ls pig-output/JOINED_STOCK_DIV
+hdfs dfs -cat pig-output/JOINED_STOCK_DIV/part-r-00000
+//
+// ---------------------------------------------------------------------
+//					USING HIVE
+// ---------------------------------------------------------------------
+//
+// Start the hive shell 
+//
+hive
+hive> show tables;
+hive> drop table temp_batting;
+hive> drop table batting;
+hive> show tables;
+hive> exit;
+//
+// Now to calculate the top scoring batter for a particular year
+//
+hdfs dfs -put Documents/hive/lahman591-csv/Batting.csv lahman591-csv
+cat Documents/hive/hive-tutorial.hive
+hive -f Documents/hive/hive-tutorial.hive
+hive
+hive> show tables;
+hive> select * from batting;
+hive> exit;
+//
+// ---------------------------------------------------------------------
+//					USING HBASE
+// ---------------------------------------------------------------------
+//
+// Startup Hbase and run the shell
+//
+hbase-daemon.sh start zookeeper
+hbase-daemon.sh start master
+hbase-daemon.sh start regionserver
+hbase shell
+hbase(main):001:0> list
+hbase(main):001:0> create 'demo', 'cf'
+hbase(main):001:0> list 'demo'
+hbase(main):001:0> put 'demo', 'row1', 'cf:a', 'value1'
+hbase(main):001:0> put 'demo', 'row2', 'cf:b', 'value2'
+hbase(main):001:0> put 'demo', 'row3', 'cf:c', 'value3'
+hbase(main):001:0> scan 'demo'
+hbase(main):001:0> exit
+// 
+// Now, import some sales data from HDFS into Hbase and use Hive to query against it
+//
+// First, for HBase
+//
+hbase shell
+hbase(main):001:0> create 'sales_data', 'location', 'units', 'size', 'age', 'pricing'
+hbase(main):001:0> quit
+hbase org.apache.hadoop.hbase.mapreduce.ImportTsv '-Dimporttsv.separator=,' -Dimporttsv.columns=HBASE_ROW_KEY,location:s_borough,location:s_neighbor,location:s_b_class,location:s_c_p,location:s_block,location:s_lot,location:s_easement,location:w_c_p_2,location:s_address,location:s_app_num,location:s_zip,units:s_res_units,units:s_com_units,units:s_tot_units,size:s_sq_ft,size:s_g_sq_ft,age:s_yr_built,pricing:s_tax_c,pricing:s_b_class2,pricing:s_price,pricing:s_sales_dt sales_data ex1data.csv
+hbase shell
+hbase(main):001:0> list
+hbase(main):001:0> get 'sales_data', '12042'
+hbase(main):001:0> quit
+//
+// Now, for some Hive access
+//
+hive
+hive> show tables;
+hive> CREATE EXTERNAL TABLE IF NOT EXISTS sales_data ( s_num FLOAT, s_borough INT, s_neighbor STRING, s_b_class STRING, s_c_p STRING, s_block STRING, s_lot STRING, s_easement STRING, w_c_p_2 STRING, s_address STRING, s_app_num STRING, s_zip STRING, s_res_units STRING, s_com_units STRING, s_tot_units INT, s_sq_ft FLOAT, s_g_sq_ft FLOAT, s_yr_built INT, s_tax_c INT, s_b_class2 STRING, s_price FLOAT, s_sales_dt STRING ) STORED BY 'org.apache.hadoop.hive.hbase.HBaseStorageHandler' WITH SERDEPROPERTIES ("hbase.columns.mapping" = "location:s_borough, location:s_neighbor,location:s_b_class,location:s_c_p,location:s_block, location:s_lot,location:s_easement,location:w_c_p_2,location:s_address, location:s_app_num,location:s_zip,units:s_res_units,units:s_com_units, units:s_tot_units,size:s_sq_ft,size:s_g_sq_ft,age:s_yr_built,pricing:s_tax_c, pricing:s_b_class2,pricing:s_price,pricing:s_sales_dt");
+hive> show tables;
+hive> describe sales_data;
+hive> select * from sales_data where s_price > 0.0 limit 5;
+hive> quit;
+//
+// ---------------------------------------------------------------------
+//					USING AWS to create a true 3-node Hadoop cluster
+// ---------------------------------------------------------------------
+//
+// Use AWS Console to startup the Master, Slave1, Slave2 nodes
+// Start the remote shells in RoyalTSX
+// Confirm that the config. files are updated correctly
+//
+cd hadoop-2.2.0/etc/hadoop
+ls -lt
+//
+// Now startup hadoop on Master which start relevant processes on Slaves
+//
+jps
+start-dfs.sh
+jps # on Slave1 and Slave2
+start-yarn.sh
+jps # on Slave1 and Slave2
+//
+// Run the Basic WordCount job using the samples and confirm output
+//
+hdfs dfs -ls gutenberg
+hadoop jar share/hadoop/mapreduce/hadoop*examples*.jar wordcount gutenberg gutenberg-wc-output
+hdfs dfs -ls gutenberg-wc-output
+hdfs dfs -cat gutenberg-wc-output/part-r-00000
+//
+// ---------------------------------------------------------------------
+//					USING R and Hadoop
+// ---------------------------------------------------------------------
+//
+TBD

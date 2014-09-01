@@ -1,0 +1,260 @@
+//
+// Step 1. Download VirtualBox from :
+// VirtualBoxURL - TBD !!!!
+//
+// Step 2. Download the VirtualBoxImage
+// Cent OS 6.5 from: http://virtualboximages.com/CentOS+6.5+x86_64+Desktop+VirtualBox+VDI+Virtual+Computer
+// 
+// 3. Copy file
+//
+cd /Users/sachinholla/Documents/Big Data/Engg/demo/
+cp ~/Downloads/VirtualBox_-_CentOS-6.5-x86_64-Desktop_VDI-\[VirtualBoxImages.com\].rar .
+//
+// 4. Use RAR extractor program to extract file into directory
+//
+pwd
+/Users/sachinholla/Documents/Big Data/Engg/demo/VirtualBox_-_CentOS-6.5-x86_64-Desktop_VDI-[VirtualBoxImages.com]/VirtualBox_-_CentOS-6.5-x86_64-Desktop_VDI-[VirtualBoxImages.com]
+// 
+// 5. Start the Virtual Box image - double click on the .vbox in the extracted RAR directory
+//
+// 5a. Before starting the image, 
+//		Might have to edit out the .vbox XML file - for entry=DVD Images
+//		just remove reference to Guest Additions since this maybe duplicated if you have other VirtualBox Images loaded in your Virtual Box manager
+// 
+// 6. Once the VM starts up, enter the password: "adminuser"
+// 
+// 7. Once you login to the Guest OS (CentOS v6.5) - there maybe a prompt for Guuest Additions
+//		Follow the on-screen prompts to install the Guest Additions from the (DVD) image
+// 
+// 8. Navigate to the Terminal Prompt and create a shortcut on the desktop
+// 		Use the shortcut to run 'ifconfig' and capture the IP address of the machine, now.
+//
+// 9. ping www.google.com to validate the outgoing IP connection works properly
+// 
+// 10. To prep the machine for hadoop, Follow the instructions :
+//		http://www.michael-noll.com/tutorials/running-hadoop-on-ubuntu-linux-single-node-cluster/
+//
+// 10.1 setup sudo access for the adminuser account
+//			per URL: https://www.digitalocean.com/community/tutorials/how-to-edit-the-sudoers-file-on-ubuntu-and-centos
+//		
+su
+<enter 'adminuser' password to login as root>
+sudo visudo
+//
+//			Scan for the line : 'root        ALL=(ALL:ALL) ALL'
+adminuser        ALL=(ALL:ALL) ALL
+<save the file>
+//
+// 10.2 install Java per URL: http://tecadmin.net/steps-to-install-java-on-centos-5-6-or-rhel-5-6/
+//
+cd /opt/
+wget --no-cookies --no-check-certificate --header "Cookie: gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie" "http://download.oracle.com/otn-pub/java/jdk/7u65-b17/jdk-7u65-linux-x64.tar.gz"
+sudo tar xzf jdk-7u65-linux-x64.tar.gz\?AuthParam\=1409529228_3c3438e05539e333b53475b273dc5b0f
+//
+//		now that java is installed, do the config.
+# cd /opt/jdk1.7.0_65/
+# alternatives --install /usr/bin/java java /opt/jdk1.7.0_65/bin/java 2
+# alternatives --config java
+# alternatives --install /usr/bin/jar jar /opt/jdk1.7.0_65/bin/jar 2
+# alternatives --install /usr/bin/javac javac /opt/jdk1.7.0_65/bin/javac 2
+# alternatives --set jar /opt/jdk1.7.0_65/bin/jar
+# alternatives --set javac /opt/jdk1.7.0_65/bin/javac 
+//
+//		Confirm that install is ok:
+//
+# java -version
+//
+//		Setup the environment variables
+//
+vi ~/.bashrc
+<at the end of the file, add:>
+#####################################
+###     Changes Added By Sachin #####
+#####################################
+export JAVA_HOME=/opt/jdk1.7.0_65
+export JRE_HOME=/opt/jdk1.7.0_65/jre
+export PATH=$PATH:/opt/jdk1.7.0_65/bin:/opt/jdk1.7.0_65/jre/bin
+#####################################
+###     End of Changes By Sachin ####
+#####################################
+//
+// 		Activate the changes
+. ~/.bashrc
+//
+// 10.3 Create a new user and usergroup
+//
+sudo groupadd hadoopgroup
+sudo useradd hadoopuser -ghadoopgroup
+sudo passwd hadoopuser
+<enter 'hadoopuser' as the password>
+//
+//		Validate new user
+su - hadoopuser
+//		
+//		Add sudo access for this user, too
+sudo visudo
+//
+//			Scan for the line : 'adminuser        ALL=(ALL:ALL) ALL'
+hadoopuser        ALL=(ALL:ALL) ALL
+<save the file>
+//
+// 10.4 Start ssh, if it isn't running
+//		Check if ssh is running (URL: http://www.ewhathow.com/2013/09/how-to-check-if-ssh-is-running-on-linux/)
+//
+sudo ps aux | grep sshd
+//
+//		If ssh isn't running, then restart the service
+//
+sudo /etc/init.d/sshd restart
+// this is to setup for auto start on bootup
+chkconfig sshd on
+//
+// 10.5 Now configure SSH access
+//
+adminuser@localhost:~$ su - hduser
+hadoopuser@localhost:~$ ssh-keygen -t rsa -P ""
+hadoopuser@localhost:~$ cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
+hadoopuser@localhost:~$ ssh localhost
+//
+//		Validate if the ssh access works by logging in from host OS (Mac)
+ssh haddopuser@<guest os - ip address>
+//
+// 10.6 Disable IPV6
+cat /proc/sys/net/ipv6/conf/all/disable_ipv6
+<0 indicates IPV6 enabled>
+sudo vim /etc/sysctl.conf
+<at end of file, add:>
+# disable ipv6
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1
+<restart computer>
+cat /proc/sys/net/ipv6/conf/all/disable_ipv6
+<1 - indicates IPV6 is disabled>
+//
+// 10.7 Install Hadoop (stable1 from 
+//
+cd /usr/local/
+sudo wget http://www.webhostingreviewjam.com/mirror/apache/hadoop/core/stable1/hadoop-1.2.1-bin.tar.gz
+sudo tar xzf hadoop-1.2.1-bin.tar.gz
+sudo ln -s hadoop-1.2.1 hadoop
+sudo chown -R hadoopuser:hadoopgroup hadoop-1.2.1
+sudo chown -R hadoopuser:hadoopgroup hadoop
+//
+// 10.8.1 Configure Hadoop - Update .bashrc
+vim ~/.bashrc
+#####################################
+###     Changes Added By Sachin #####
+#####################################
+# Set Hadoop-related environment variables
+export HADOOP_HOME=/usr/local/hadoop
+
+# Set JAVA_HOME (we will also configure JAVA_HOME directly for Hadoop later on)
+export JAVA_HOME=/opt/jdk1.7.0_65
+export JRE_HOME=/opt/jdk1.7.0_65/jre
+export PATH=$PATH:/opt/jdk1.7.0_65/bin:/opt/jdk1.7.0_65/jre/bin
+
+# Some convenient aliases and functions for running Hadoop-related commands
+unalias fs &> /dev/null
+alias fs="hadoop fs"
+unalias hls &> /dev/null
+alias hls="fs -ls"
+
+# If you have LZO compression enabled in your Hadoop cluster and
+# compress job outputs with LZOP (not covered in this tutorial):
+# Conveniently inspect an LZOP compressed file from the command
+# line; run via:
+#
+# $ lzohead /hdfs/path/to/lzop/compressed/file.lzo
+#
+# Requires installed 'lzop' command.
+#
+lzohead () {
+    hadoop fs -cat $1 | lzop -dc | head -1000 | less
+}
+
+# Add Hadoop bin/ directory to PATH
+export PATH=$PATH:$HADOOP_HOME/bin
+
+#####################################
+###     End of Changes By Sachin ####
+#####################################
+//
+// 10.8.2 Configure Hadoop - Update hadoop config files
+//			Follow instructions verbatim: http://www.michael-noll.com/tutorials/running-hadoop-on-ubuntu-linux-single-node-cluster/#configuration
+//
+// 10.9 Format HDFS
+//			Follow insructions @ http://www.michael-noll.com/tutorials/running-hadoop-on-ubuntu-linux-single-node-cluster/#formatting-the-hdfs-filesystem-via-the-namenode
+//
+// 10.10 Startup the Hadoop cluster
+//			Follow instructions @ http://www.michael-noll.com/tutorials/running-hadoop-on-ubuntu-linux-single-node-cluster/#starting-your-single-node-cluster
+// 10.11 Setup the sample data
+//			Download from Project Gutenberg:
+//				1. http://www.gutenberg.org/etext/20417
+//				2. http://www.gutenberg.org/etext/5000
+//				3. http://www.gutenberg.org/etext/4300
+//
+mkdir ~/Documents/gutenberg
+//
+// 10.12 Run the MapReduce job
+// 			Url: http://www.michael-noll.com/tutorials/running-hadoop-on-ubuntu-linux-single-node-cluster/#run-the-mapreduce-job
+//
+hadoop dfs -mkdir /user
+hadoop dfs -mkdir /user/hadoopuser
+hadoop dfs -copyFromLocal ~/Documents/gutenberg /user/hadoopuser/gutenberg
+hadoop jar $HADOOP_HOME/hadoop*examples*.jar wordcount gutenberg/20417.txt gutenberg-output
+hadoop dfs -ls gutenberg-output
+//
+// 11. Hadoop2 installation/configuration (Reference: http://www.alexjf.net/blog/distributed-systems/hadoop-yarn-installation-definitive-guide/)
+//
+// 11.1 Download Recent Stable2 version from http://www.webhostingreviewjam.com/mirror/apache/hadoop/core/stable2/hadoop-2.4.1.tar.gz
+//
+cd /usr/local
+wget http://www.webhostingreviewjam.com/mirror/apache/hadoop/core/stable2/hadoop-2.4.1.tar.gz
+tar xvf hadoop-2.4.1.tar.gz --gzip
+//
+// 11.2 System Config. - Update the symbolic link
+//
+rm hadoop
+sudo ln -s hadoop-2.4.1 hadoop
+// 11.3 System Config - Update the env. vars
+vim ~/.bashrc
+export HADOOP_PREFIX="/usr/local/hadoop"
+export HADOOP_HOME=$HADOOP_PREFIX
+export HADOOP_COMMON_HOME=$HADOOP_PREFIX
+export HADOOP_CONF_DIR=$HADOOP_PREFIX/etc/hadoop
+export HADOOP_HDFS_HOME=$HADOOP_PREFIX
+export HADOOP_MAPRED_HOME=$HADOOP_PREFIX
+export HADOOP_YARN_HOME=$HADOOP_PREFIX
+# Add Hadoop bin/, sbin/ directory to PATH
+export PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+#
+. ~/.bashrc
+// 
+// 11.4 Hadoop Config - HDFS config file
+//			Per: http://www.alexjf.net/blog/distributed-systems/hadoop-yarn-installation-definitive-guide/http://www.alexjf.net/blog/distributed-systems/hadoop-yarn-installation-definitive-guide/#hdfs-configuration
+//
+// 11.5 Hadoop Config - YARN config file
+//			Per: http://www.alexjf.net/blog/distributed-systems/hadoop-yarn-installation-definitive-guide/#yarn-configuration
+//
+// 11.6 Start the Hadoop cluster
+//
+# Format the namenode directory (DO THIS ONLY ONCE, THE FIRST TIME)
+$HADOOP_PREFIX/bin/hdfs namenode -format
+## Start the HDFS daemons
+start-dfs.sh
+## Start YARN daemons
+start-yarn.sh
+// 11.7 Prep for MR execution
+hdfs dfs -mkdir /user
+hdfs dfs -mkdir /user/gutenberg
+hdfs dfs -copyFromLocal ~/Documents/gutenberg /user/hadoopuser/gutenberg
+hdfs dfs -ls
+// 11.8 Run the wordcount MapReduce job and check results
+hadoop jar /usr/local/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-examples-2.4.1.jar wordcount gutenberg/20417.txt gutenberg-output
+//
+// 11.9 Stop the hadoop processes
+stop-yarn.sh
+stop-dfs.sh
+jps
+
